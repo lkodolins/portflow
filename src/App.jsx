@@ -7,11 +7,13 @@ import PublishSection from './components/PublishSection'
 import PublishModal from './components/PublishModal'
 import PortfolioViewer from './components/PortfolioViewer'
 import DevBanner from './components/DevBanner'
+import VersionFooter from './components/VersionFooter'
 
 function App() {
   const [projects, setProjects] = useState([])
   const [showPublishModal, setShowPublishModal] = useState(false)
   const [portfolioView, setPortfolioView] = useState(null)
+  const [analysisStats, setAnalysisStats] = useState({})
 
   useEffect(() => {
     // Check if URL contains portfolio route
@@ -40,6 +42,14 @@ function App() {
 
   const addProject = (project) => {
     setProjects(prev => [...prev, { ...project, id: Date.now() }])
+    
+    // Track analysis method for debugging
+    if (project.analysisMethod) {
+      setAnalysisStats(prev => ({
+        ...prev,
+        [project.analysisMethod]: (prev[project.analysisMethod] || 0) + 1
+      }))
+    }
   }
 
   const updateProject = (id, updates) => {
@@ -115,13 +125,15 @@ function App() {
         )}
       </div>
 
-      <PublishModal 
-        isOpen={showPublishModal}
-        onClose={() => setShowPublishModal(false)}
-        projects={projects}
-      />
-    </div>
-  )
-}
+                <PublishModal
+            isOpen={showPublishModal}
+            onClose={() => setShowPublishModal(false)}
+            projects={projects}
+          />
+
+          <VersionFooter analysisStats={analysisStats} />
+        </div>
+      )
+    }
 
 export default App 

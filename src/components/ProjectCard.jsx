@@ -5,6 +5,22 @@ import EditableText from './EditableText'
 
 const ProjectCard = ({ project, onUpdate, onRemove, index }) => {
   const [isEditing, setIsEditing] = useState(false)
+  
+  // Analysis method indicator
+  const getAnalysisIndicator = (method) => {
+    switch (method) {
+      case 'backend-ai':
+        return { icon: '🧠', text: 'AI Analysis', color: 'text-green-600' }
+      case 'frontend-legacy':
+        return { icon: '⚡', text: 'Legacy AI', color: 'text-blue-600' }
+      case 'pattern-recognition':
+        return { icon: '🔍', text: 'Pattern Recognition', color: 'text-orange-600' }
+      default:
+        return { icon: '📄', text: 'Basic Analysis', color: 'text-gray-600' }
+    }
+  }
+  
+  const analysisInfo = getAnalysisIndicator(project.analysisMethod)
 
   const getIcon = (type) => {
     switch (type) {
