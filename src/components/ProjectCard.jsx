@@ -126,6 +126,19 @@ const ProjectCard = ({ project, onUpdate, onRemove, index }) => {
           multiline
         />
 
+        {project.notes && (
+          <div className="pt-2 border-t border-gray-100">
+            <EditableText
+              value={project.notes}
+              onSave={(value) => onUpdate(project.id, { notes: value })}
+              isEditing={isEditing}
+              className="text-gray-500 text-xs italic leading-relaxed"
+              placeholder="Additional notes..."
+              multiline
+            />
+          </div>
+        )}
+
         {/* Action */}
         {project.url && (
           <div className="pt-2">

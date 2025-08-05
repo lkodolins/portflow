@@ -1,18 +1,61 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Check, Copy, ExternalLink, Share2, Twitter, Linkedin } from 'lucide-react'
+import { X, Check, Copy, ExternalLink, Share2, Twitter, Linkedin, Cloud, CloudOff } from 'lucide-react'
+import portfolioService from '../services/portfolioService'
 
 const PublishModal = ({ isOpen, onClose, projects }) => {
   const [copied, setCopied] = useState(false)
   const [portfolioUrl, setPortfolioUrl] = useState('')
+  const [isPublishing, setIsPublishing] = useState(false)
+  const [publishResult, setPublishResult] = useState(null)
+  const [isOnline, setIsOnline] = useState(portfolioService.isOnline)
 
   useEffect(() => {
-    if (isOpen) {
-      // Generate a fake portfolio URL
-      const randomId = Math.random().toString(36).substr(2, 9)
-      setPortfolioUrl(`https://portflow.app/portfolio/${randomId}`)
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
     }
-  }, [isOpen])
+  }, [])
+
+  useEffect(() => {
+    if (isOpen && projects.length > 0) {
+      publishPortfolio()
+    }
+  }, [isOpen, projects])
+
+  const publishPortfolio = async () => {
+    setIsPublishing(true)
+    setPublishResult(null)
+    
+    try {
+      const result = await portfolioService.publishPortfolio(projects, {
+        title: 'My Creative Portfolio',
+        description: `A showcase of ${projects.length} professional projects`
+      })
+      
+      setPublishResult(result)
+      setPortfolioUrl(result.url)
+      
+      // Also store in localStorage as backup
+      localStorage.setItem('portflow-projects', JSON.stringify(projects))
+      
+    } catch (error) {
+      console.error('Publishing failed:', error)
+      setPublishResult({
+        success: false,
+        error: error.message,
+        offline: true
+      })
+    } finally {
+      setIsPublishing(false)
+    }
+  }
 
   const copyToClipboard = async () => {
     try {
@@ -69,25 +112,75 @@ const PublishModal = ({ isOpen, onClose, projects }) => {
               <X className="w-5 h-5" />
             </button>
 
-            {/* Success animation */}
+            {/* Status animation */}
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2, type: "spring", damping: 15, stiffness: 300 }}
-              className="w-16 h-16 bg-green-100 rounded-3xl flex items-center justify-center mx-auto mb-6"
+              className={`w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-6 ${
+                isPublishing 
+                  ? 'bg-blue-100' 
+                  : publishResult?.success 
+                    ? 'bg-green-100' 
+                    : 'bg-orange-100'
+              }`}
             >
-              <Check className="w-8 h-8 text-green-600" />
+              {isPublishing ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  className="w-8 h-8 text-blue-600"
+                >
+                  <Cloud className="w-8 h-8" />
+                </motion.div>
+              ) : publishResult?.success ? (
+                <Check className="w-8 h-8 text-green-600" />
+              ) : (
+                <CloudOff className="w-8 h-8 text-orange-600" />
+              )}
             </motion.div>
 
             {/* Content */}
             <div className="text-center space-y-6">
               <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                  🎉 Portfolio Published!
-                </h3>
-                <p className="text-gray-600">
-                  Your portfolio with {projects.length} project{projects.length !== 1 ? 's' : ''} is now live and ready to share.
-                </p>
+                {isPublishing ? (
+                  <>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                      Publishing Portfolio...
+                    </h3>
+                    <p className="text-gray-600">
+                      {isOnline && portfolioService.isConfigured() 
+                        ? 'Uploading your projects to the cloud...' 
+                        : 'Preparing your portfolio for sharing...'}
+                    </p>
+                  </>
+                ) : publishResult?.success ? (
+                  <>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                      🎉 Portfolio Published!
+                    </h3>
+                    <p className="text-gray-600">
+                      Your portfolio with {projects.length} project{projects.length !== 1 ? 's' : ''} is now {publishResult.offline ? 'saved locally' : 'live and ready to share'}.
+                    </p>
+                    {publishResult.offline && (
+                      <div className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-xl">
+                        <p className="text-orange-700 text-sm">
+                          <CloudOff className="w-4 h-4 inline mr-1" />
+                          Saved offline - will sync when connected to Supabase
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                      Portfolio Ready!
+                    </h3>
+                    <p className="text-gray-600">
+                      Your portfolio has been prepared. {publishResult?.error || 'Connection issue - saved locally.'}
+                    </p>
+                  </>
+                )}
               </div>
 
               {/* Share URL */}

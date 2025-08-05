@@ -1,36 +1,37 @@
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useDropzone } from 'react-dropzone'
 import { Upload, Link2, FileText, Image, Github, Figma, Video } from 'lucide-react'
+import openaiService from '../services/openai'
+import contentExtractor from '../services/contentExtractor'
+import portfolioService from '../services/portfolioService'
+import LoadingIndicator from './LoadingIndicator'
 
 const UploadSection = ({ onAddProject }) => {
   const [linkInput, setLinkInput] = useState('')
+  const [notesInput, setNotesInput] = useState('')
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [processingStage, setProcessingStage] = useState('')
+  const [processingType, setProcessingType] = useState('')
+  const [processingProgress, setProcessingProgress] = useState(0)
 
-  // Mock AI function to generate project data
-  const generateProjectData = (file, type = 'file') => {
-    const mockTitles = [
-      'E-commerce Dashboard',
-      'Mobile App Redesign',
-      'Brand Identity System',
-      'Portfolio Website',
-      'SaaS Landing Page',
-      'iOS App Interface',
-      'Web Application',
-      'Design System',
-      'Marketing Campaign',
-      'User Research Study'
-    ]
+  // Enhanced AI function to generate project data with content extraction
+  const generateProjectData = async (file, type = 'file', additionalNotes = '') => {
+    let projectInfo = {
+      notes: additionalNotes
+    }
 
-    const mockDescriptions = [
-      'A comprehensive design solution featuring modern UI patterns, responsive layouts, and seamless user experience. This project showcases advanced design thinking and technical implementation.',
-      'An innovative approach to user interface design with focus on accessibility, performance, and visual appeal. Includes detailed user journey mapping and interaction design.',
-      'Strategic brand development with cohesive visual identity, typography system, and color palette. Features complete brand guidelines and application examples.',
-      'Full-stack development project with modern frameworks, clean architecture, and optimized performance. Includes responsive design and cross-browser compatibility.',
-      'Creative problem-solving through design and development, featuring cutting-edge technologies and best practices in user experience design.'
-    ]
+    if (type === 'file') {
+      projectInfo.file = file
+      projectInfo.fileName = file.name
+      projectInfo.fileType = file.type
+    } else {
+      projectInfo.url = file
+    }
 
-    const title = mockTitles[Math.floor(Math.random() * mockTitles.length)]
-    const description = mockDescriptions[Math.floor(Math.random() * mockDescriptions.length)]
+    // Generate AI-powered title and description with content extraction
+    const aiResult = await openaiService.generateProjectDescription(projectInfo)
+    const { title, description } = aiResult
     
     let projectType, icon
     if (type === 'link') {
@@ -65,23 +66,140 @@ const UploadSection = ({ onAddProject }) => {
       icon,
       file: type === 'file' ? file : null,
       url: type === 'link' ? file : null,
-      preview: type === 'file' && file.type?.startsWith('image/') ? URL.createObjectURL(file) : null
+      preview: type === 'file' && file.type?.startsWith('image/') ? URL.createObjectURL(file) : null,
+      notes: additionalNotes || ''
     }
   }
 
-  const onDrop = (acceptedFiles) => {
-    acceptedFiles.forEach(file => {
-      const projectData = generateProjectData(file)
-      onAddProject(projectData)
-    })
+  // Enhanced version with progress tracking
+  const generateProjectDataWithProgress = async (file, type = 'file', additionalNotes = '') => {
+    let projectInfo = {
+      notes: additionalNotes
+    }
+
+    if (type === 'file') {
+      projectInfo.file = file
+      projectInfo.fileName = file.name
+      projectInfo.fileType = file.type
+    } else {
+      projectInfo.url = file
+    }
+
+    // Update progress during content extraction
+    setProcessingProgress(25)
+    
+    // Extract content with progress updates
+    let extractedContent = null
+    if (type === 'file') {
+      const fileType = file.type || ''
+      if (fileType.includes('pdf')) {
+        setProcessingStage('extracting')
+        extractedContent = await contentExtractor.extractPDFText(file)
+      } else if (fileType.startsWith('image/')) {
+        setProcessingStage('extracting')
+        extractedContent = await contentExtractor.extractImageText(file)
+      }
+    } else if (type === 'link') {
+      setProcessingStage('extracting')
+      extractedContent = await contentExtractor.extractURLContent(file)
+    }
+    
+    setProcessingProgress(60)
+    setProcessingStage('analyzing')
+    
+    // Generate AI-powered title and description
+    const aiResult = await openaiService.generateProjectDescription(projectInfo)
+    const { title, description } = aiResult
+    
+    setProcessingProgress(90)
+    setProcessingStage('generating')
+    
+    let projectType, icon
+    if (type === 'link') {
+      if (file.includes('github')) {
+        projectType = 'github'
+        icon = 'github'
+      } else if (file.includes('figma')) {
+        projectType = 'figma'
+        icon = 'figma'
+      } else {
+        projectType = 'link'
+        icon = 'link'
+      }
+    } else {
+      const fileType = file.type || ''
+      if (fileType.startsWith('image/')) {
+        projectType = 'image'
+        icon = 'image'
+      } else if (fileType.includes('pdf')) {
+        projectType = 'pdf'
+        icon = 'pdf'
+      } else {
+        projectType = 'file'
+        icon = 'file'
+      }
+    }
+    
+    setProcessingProgress(100)
+
+    return {
+      title,
+      description,
+      type: projectType,
+      icon,
+      file: type === 'file' ? file : null,
+      url: type === 'link' ? file : null,
+      preview: type === 'file' && file.type?.startsWith('image/') ? URL.createObjectURL(file) : null,
+      notes: additionalNotes || '',
+      extractedContent: extractedContent || null
+    }
   }
 
-  const handleLinkSubmit = (e) => {
+  const onDrop = async (acceptedFiles) => {
+    for (const file of acceptedFiles) {
+      setIsProcessing(true)
+      setProcessingType(contentExtractor.detectProjectType(file, null))
+      setProcessingStage('extracting')
+      setProcessingProgress(0)
+      
+      try {
+        const projectData = await generateProjectDataWithProgress(file, 'file', notesInput)
+        onAddProject(projectData)
+      } catch (error) {
+        console.error('Error processing file:', error)
+        // Still add the project with fallback data
+        const fallbackData = await generateProjectData(file, 'file', notesInput)
+        onAddProject(fallbackData)
+      } finally {
+        setIsProcessing(false)
+        setProcessingProgress(0)
+      }
+    }
+    setNotesInput('')
+  }
+
+  const handleLinkSubmit = async (e) => {
     e.preventDefault()
     if (linkInput.trim()) {
-      const projectData = generateProjectData(linkInput, 'link')
-      onAddProject(projectData)
-      setLinkInput('')
+      setIsProcessing(true)
+      setProcessingType('url')
+      setProcessingStage('extracting')
+      setProcessingProgress(0)
+      
+      try {
+        const projectData = await generateProjectDataWithProgress(linkInput, 'link', notesInput)
+        onAddProject(projectData)
+      } catch (error) {
+        console.error('Error processing URL:', error)
+        // Still add the project with fallback data
+        const fallbackData = await generateProjectData(linkInput, 'link', notesInput)
+        onAddProject(fallbackData)
+      } finally {
+        setIsProcessing(false)
+        setProcessingProgress(0)
+        setLinkInput('')
+        setNotesInput('')
+      }
     }
   }
 
@@ -106,10 +224,33 @@ const UploadSection = ({ onAddProject }) => {
         </p>
       </div>
 
+      {/* Additional Notes */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className="card p-6"
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <FileText className="w-5 h-5 text-primary-500" />
+          Additional Notes
+        </h3>
+        <textarea
+          value={notesInput}
+          onChange={(e) => setNotesInput(e.target.value)}
+          placeholder="Add context, project requirements, or any details that help describe your work..."
+          className="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+          rows={3}
+        />
+        <p className="text-sm text-gray-500 mt-2">
+          These notes will help generate better project descriptions and provide context for your work.
+        </p>
+      </motion.div>
+
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
         className="grid md:grid-cols-2 gap-6"
       >
         {/* File Upload Zone */}
@@ -203,6 +344,17 @@ const UploadSection = ({ onAddProject }) => {
           </form>
         </div>
       </motion.div>
+
+      {/* Processing Modal */}
+      <AnimatePresence>
+        {isProcessing && (
+          <LoadingIndicator 
+            type={processingType}
+            stage={processingStage}
+            progress={processingProgress}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
