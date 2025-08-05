@@ -93,10 +93,18 @@ const ProjectCard = ({ project, onUpdate, onRemove, index }) => {
           <div className={`p-2 rounded-xl ${getTypeColor(project.type)}`}>
             {getIcon(project.type)}
           </div>
-          <div>
+          <div className="flex items-center gap-2">
             <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getTypeColor(project.type)}`}>
               {project.type}
             </span>
+            {project.analysisMethod && (
+              <span 
+                className={`text-xs px-2 py-1 rounded-full bg-gray-100 ${analysisInfo.color}`}
+                title={`Analyzed using: ${analysisInfo.text}`}
+              >
+                {analysisInfo.icon}
+              </span>
+            )}
           </div>
         </div>
         
